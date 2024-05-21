@@ -1,3 +1,5 @@
+#define STB_IMAGE_IMPLEMENTATION
+
 #include <stdio.h>
 #include <string.h>
 #include <cmath>
@@ -14,6 +16,7 @@
 #include "Shader.h"
 #include "Window.h"
 #include "Camera.h"
+#include "Texture.h"
 
 //Window dimensions
 const GLint WIDTH = 800, HEIGHT = 600;
@@ -25,6 +28,9 @@ std::vector<Shader*> shaderList;
 GLfloat deltaTime = 0.0f;
 GLfloat lastTime = 0.0f;
 
+Texture brick;
+Texture dirt;
+
 //Vertex Shader
 static const char* vShader = "Shaders/vertex.shader";
 
@@ -33,10 +39,11 @@ static const char* fShader = "Shaders/fragment.shader";
 
 void createTriangle() {
 	GLfloat vertices[] = {
-		-1.0f, -1.0f, 0.0f,
-		0.0f, -1.0f, 1.0f,
-		1.0f, -1.0f, 0.0f,
-		0.0f, 1.0f, 0.0f,
+//		x		y		z		u		v
+		-1.0f,	-1.0f,	0.0f,	0.0f,	0.0f,
+		0.0f,	-1.0f,	1.0f,	0.5f,	0.0f,
+		1.0f,	-1.0f,	0.0f,	1.0f,	0.0f,
+		0.0f,	1.0f,	0.0f,	0.5f,	1.0f
 	};
 
 	unsigned int indices[] = {
@@ -47,7 +54,7 @@ void createTriangle() {
 	};
 
 	Mesh* triangle = new Mesh();
-	triangle->createMesh(vertices, indices, 12, 12);
+	triangle->createMesh(vertices, indices, 20, 12);
 	meshList.push_back(triangle);
 }
 
@@ -66,6 +73,11 @@ int main() {
 
 	createTriangle();
 	createShader();
+	brick = Texture((char*)"Assets/Textures/brick.png");
+	brick.loadTexture();
+
+	dirt = Texture((char*)"Assets/Textures/dirt.png");
+	dirt.loadTexture();
 
 	int bufferWidth = window.getBufferWidth(), bufferHeight = window.getBufferHeight();
 
@@ -101,6 +113,7 @@ int main() {
 		glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
 		glUniformMatrix4fv(uniformProjection, 1, GL_FALSE, glm::value_ptr(projectionMat));
 		glUniformMatrix4fv(uniformView, 1, GL_FALSE, glm::value_ptr(camera.calculateViewMatrix()));
+		brick.useTexture();
 		meshList[0]->renderMesh();
 		
 		glUseProgram(0);
