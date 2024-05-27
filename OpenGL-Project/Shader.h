@@ -17,6 +17,13 @@ public:
 	GLuint getModelLocation();
 	GLuint getProjectionLocation();
 	GLuint getViewLocation();
+	GLuint getAmbientIntensityLocation();
+	GLuint getAmbientColourLocation();
+	GLuint getDiffuseDirectionLocation();
+	GLuint getDiffuseIntensityLocation();
+	GLuint getSpecularIntensityLocation();
+	GLuint getSpecularShininessLocation();
+	GLuint getEyePositionLocation();
 
 	void useShader();
 	void clearShader();
@@ -24,6 +31,10 @@ public:
 
 private:
 	GLuint shaderID, uniformModel, uniformProjection, uniformView;
+	GLuint uniformAmbientIntensity, uniformAmbientColour;
+	GLuint uniformDiffuseDirection, uniformDiffuseIntensity;
+	GLuint uniformSpecularIntensity, uniformSpecularShininess;
+	GLuint uniformEyePosition;
 
 	void compileShader(const char*vertexCode, const char* fragmentShader);
 	void addShader(GLuint id, const char* shaderCode, GLenum shaderType);
