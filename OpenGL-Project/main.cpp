@@ -12,16 +12,23 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
+#include "CommonValues.h"
+
 #include "Mesh.h"
 #include "Shader.h"
 #include "Window.h"
 #include "Camera.h"
 #include "Texture.h"
-#include "Light.h"
+#include "DirectionalLight.h"
+#include "PointLight.h"
+#include "SpotLight.h"
 #include "Material.h"
+#include "Model.h"
+
+#include <assimp/Importer.hpp>
 
 //Window dimensions
-const GLint WIDTH = 800, HEIGHT = 600;
+const GLint WIDTH = 1280, HEIGHT = 720;
 const float toRadians = 3.1459265f / 180.0f;
 
 std::vector<Mesh*> meshList;
@@ -33,8 +40,13 @@ GLfloat lastTime = 0.0f;
 Texture brick;
 Texture dirt;
 
-Light ambient;
+DirectionalLight ambient;
+PointLight pointLights[MAX_POINT_LIGHTS];
+SpotLight spotLights[MAX_SPOT_LIGHTS];
 Material mat1;
+Material mat2;
+
+Model xwing;
 
 //Vertex Shader
 static const char* vShader = "Shaders/vertex.shader";
@@ -89,6 +101,13 @@ void createTriangle() {
 		0.0f,	1.0f,	0.0f,	0.5f,	1.0f,	0.0f,	0.0f,	0.0f
 	};
 
+	GLfloat floorVertices[] = {
+		-10.0f,	0.0f,	-10.0f,	0.0f,	0.0f,	0.0f,	-1.0f, 0.0f,
+		10.0f,	0.0f,	-10.0f, 10.0f,	0.0f,	0.0f,	-1.0f, 0.0f,
+		-10.0f, 0.0f,	10.0f,	0.0f,	10.0f,	0.0f,	-1.0f, 0.0f,
+		10.0f,	0.0f,	10.0f,	10.0f,	10.0f,	0.0f,	-1.0f, 0.0f,
+	};
+
 	unsigned int indices[] = {
 		0, 3, 1,
 		1, 3, 2,
@@ -96,11 +115,20 @@ void createTriangle() {
 		0, 1, 2
 	};
 
+	unsigned int floorIndices[] = {
+		0,2,1,
+		1,2,3
+	};
+
 	calcNormals(indices, 12, vertices, 32, 8, 5);
 
 	Mesh* triangle = new Mesh();
 	triangle->createMesh(vertices, indices, 32, 12);
 	meshList.push_back(triangle);
+
+	Mesh* floorMesh = new Mesh();
+	floorMesh->createMesh(floorVertices, floorIndices, 32, 6);
+	meshList.push_back(floorMesh);
 }
 
 void createShader() {
@@ -119,25 +147,64 @@ int main() {
 	createTriangle();
 	createShader();
 	brick = Texture((char*)"Assets/Textures/brick.png");
-	brick.loadTexture();
+	brick.loadTextureWithAlpha();
 
 	dirt = Texture((char*)"Assets/Textures/dirt.png");
-	dirt.loadTexture();
+	dirt.loadTextureWithAlpha();
 
-	ambient = Light(1.0f, 1.0f, 1.0f, 0.2f, 2.0f, -1.0f, -2.0f, 1.0f);
+	ambient = DirectionalLight(1.0f, 1.0f, 1.0f, //r g b
+								0.5f, 0.5f, //aIntensity dIntensity
+								2.0f, -1.0f, -2.0f); // x y z
+
+	unsigned int pointLightCount = 0;
+
+	pointLights[0] = PointLight(0.0f, 1.0f, 0.0f, //r g b
+								0.1f, 0.1f,	//aIntensity dIntensity
+								-4.0f, 2.0f, 0.0f, //x y z
+								0.3f, 0.2f, 0.1f); //constant linear exponent
+
+	pointLightCount++;
+
+	pointLights[1] = PointLight(1.0f, 0.0f, 1.0f, //r g b
+		0.1f, 0.1f,	//aIntensity dIntensity
+		4.0f, 1.0f, 0.0f, //x y z
+		0.3f, 0.2f, 0.1f); //constant linear exponent
+
+	pointLightCount++;
+
+	unsigned int spotLightCount = 0;
+
+	spotLights[0] = SpotLight(1.0f, 1.0f, 0.0f, //r g b
+							0.1f, 1.0f,	//aIntensity dIntensity
+							-4.0f, 2.0f, 0.0f, //x y z
+							0.0f, -1.0f, 0.0f, //direction
+							0.3f, 0.2f, 0.1f, //constant linear exponent
+							20.0f); //edge
+
+	spotLightCount++;
+
+	spotLights[1] = SpotLight(1.0f, 1.0f, 1.0f, //r g b
+		0.1f, 2.0f,	//aIntensity dIntensity
+		-4.0f, 2.0f, 0.0f, //x y z
+		0.0f, -1.0f, 0.0f, //direction
+		1.0f, 0.0f, 0.0f, //constant linear exponent
+		20.0f); //edge
+
+	spotLightCount++;
 
 	//shiny
-	mat1 = Material(1.0f, 32);
+	mat1 = Material(2.0f, 8);
 	//dull
-	//mat1 = Material(0.3f, 4);
+	mat2 = Material(1.0f, 4);
+
+	xwing = Model();
+	xwing.loadModel("Assets/Models/Seahawk.obj");
 
 	int bufferWidth = window.getBufferWidth(), bufferHeight = window.getBufferHeight();
 
 	glm::mat4 projectionMat = glm::perspective(45.0f, (GLfloat)bufferWidth / (GLfloat)bufferHeight, 0.1f, 100.0f);
 
 	GLuint uniformModel, uniformProjection, uniformView;
-	GLuint uniformAmbientIntensity, uniformAmbientColour;
-	GLuint uniformDiffuseDirection, uniformDiffuseIntensity;
 	GLuint uniformSpecIntensity, uniformSpecShininess;
 	GLuint uniformEyePos;
 
@@ -160,15 +227,18 @@ int main() {
 		uniformModel = shaderList[0]->getModelLocation();
 		uniformProjection = shaderList[0]->getProjectionLocation();
 		uniformView = shaderList[0]->getViewLocation();
-		uniformAmbientIntensity = shaderList[0]->getAmbientIntensityLocation();
-		uniformAmbientColour = shaderList[0]->getAmbientColourLocation();
-		uniformDiffuseDirection = shaderList[0]->getDiffuseDirectionLocation();
-		uniformDiffuseIntensity = shaderList[0]->getDiffuseIntensityLocation();
 		uniformSpecIntensity = shaderList[0]->getSpecularIntensityLocation();
 		uniformSpecShininess = shaderList[0]->getSpecularShininessLocation();
 		uniformEyePos = shaderList[0]->getEyePositionLocation();
 
-		ambient.useLight(uniformAmbientIntensity, uniformAmbientColour, uniformDiffuseIntensity, uniformDiffuseDirection);
+		spotLights[1].setFlash(camera.getCameraPositon(), camera.getCameraDirection());
+
+		//set Directional Light
+		shaderList[0]->setDirectionalLight(&ambient);
+		//set Point Lights
+		shaderList[0]->setPointLights(pointLights, pointLightCount);
+		//Set Spot Lights
+		shaderList[0]->setSpotLights(spotLights, spotLightCount);
 
 		glUniformMatrix4fv(uniformProjection, 1, GL_FALSE, glm::value_ptr(projectionMat));
 		glUniformMatrix4fv(uniformView, 1, GL_FALSE, glm::value_ptr(camera.calculateViewMatrix()));
@@ -180,11 +250,24 @@ int main() {
 		model = glm::translate(model, glm::vec3(0.0f, 0.0f, -2.5f));
 		model = glm::rotate(model, 0.0f * toRadians, glm::vec3(0.0f, 1.0f, 0.0f));
 		//model = glm::scale(model, glm::vec3(0.4f, 0.4f, 1.0f));
-
 		glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
 		brick.useTexture();
 		mat1.useMaterial(uniformSpecIntensity, uniformSpecShininess);
 		meshList[0]->renderMesh();
+
+		model = glm::mat4(1.0f);
+		model = glm::translate(model, glm::vec3(0.0f, 2.0f, -2.5f));
+		model = glm::rotate(model, 0.0f * toRadians, glm::vec3(0.0f, 1.0f, 0.0f));
+		model = glm::scale(model, glm::vec3(0.01f, 0.01f, 0.01f));
+		glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
+		xwing.renderModel();
+
+		glm::mat4 floorModel(1.0f);
+		floorModel = glm::translate(floorModel, glm::vec3(0.0f, -2.0f, 0.0f));
+		glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(floorModel));
+		dirt.useTexture();
+		mat2.useMaterial(uniformSpecIntensity, uniformSpecShininess);
+		meshList[1]->renderMesh();
 		
 		glUseProgram(0);
 

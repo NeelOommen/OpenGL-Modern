@@ -6,10 +6,12 @@ class Texture
 {
 public:
 	Texture();
-	Texture(char* fileLoc);
+	Texture(const char* fileLoc);
 	~Texture();
 
-	void loadTexture();
+	bool loadTexture();
+	bool loadTextureWithAlpha();
+
 	void useTexture();
 	void clearTexture();
 private:
@@ -17,6 +19,6 @@ private:
 
 	int width, height, bitDepth;
 
-	char* fileLocation;
+	const char* fileLocation;
 };
 
