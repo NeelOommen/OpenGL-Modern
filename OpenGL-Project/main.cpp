@@ -34,6 +34,8 @@ const float toRadians = 3.1459265f / 180.0f;
 std::vector<Mesh*> meshList;
 std::vector<Shader*> shaderList;
 
+Shader directionalShadowShader;
+
 GLfloat deltaTime = 0.0f;
 GLfloat lastTime = 0.0f;
 
@@ -47,6 +49,15 @@ Material mat1;
 Material mat2;
 
 Model xwing;
+
+GLuint uniformModel, uniformProjection, uniformView;
+GLuint uniformSpecIntensity, uniformSpecShininess;
+GLuint uniformEyePos;
+
+Camera camera = Camera(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), -90.0f, 0.0f, 5.0f, 1.0f);
+
+unsigned int pointLightCount = 0;
+unsigned int spotLightCount = 0;
 
 //Vertex Shader
 static const char* vShader = "Shaders/vertex.shader";
@@ -135,14 +146,95 @@ void createShader() {
 	Shader* s1 = new Shader();
 	s1->createFromFile(vShader, fShader);
 	shaderList.push_back(s1);
+
+	directionalShadowShader = Shader();
+	directionalShadowShader.createFromFile("Shaders/directional_shadow_vert.shader", "Shaders/directional_shadow_frag.shader");
+}
+
+void renderTestScene() {
+	glm::mat4 model(1.0f);
+	model = glm::translate(model, glm::vec3(0.0f, 0.0f, -2.5f));
+	model = glm::rotate(model, 0.0f * toRadians, glm::vec3(0.0f, 1.0f, 0.0f));
+	//model = glm::scale(model, glm::vec3(0.4f, 0.4f, 1.0f));
+	glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
+	brick.useTexture();
+	mat1.useMaterial(uniformSpecIntensity, uniformSpecShininess);
+	meshList[0]->renderMesh();
+
+	model = glm::mat4(1.0f);
+	model = glm::translate(model, glm::vec3(0.0f, 2.0f, -2.5f));
+	model = glm::rotate(model, 0.0f * toRadians, glm::vec3(0.0f, 1.0f, 0.0f));
+	model = glm::scale(model, glm::vec3(0.01f, 0.01f, 0.01f));
+	glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
+	xwing.renderModel();
+
+	glm::mat4 floorModel(1.0f);
+	floorModel = glm::translate(floorModel, glm::vec3(0.0f, -2.0f, 0.0f));
+	glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(floorModel));
+	dirt.useTexture();
+	mat2.useMaterial(uniformSpecIntensity, uniformSpecShininess);
+	meshList[1]->renderMesh();
+}
+
+void shadowMapPass(DirectionalLight* light) {
+	directionalShadowShader.useShader();
+
+	glViewport(0, 0, light->getShadowMap()->getWidth(), light->getShadowMap()->getHeight());
+
+	light->getShadowMap()->write();
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	uniformModel = directionalShadowShader.getModelLocation();
+	directionalShadowShader.setDirectionalLightTransform(&light->calculateLightTransform());
+
+	renderTestScene();
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void renderPass(glm::mat4 projectionMatrix, glm::mat4 viewMatrix) {
+	shaderList[0]->useShader();
+
+	uniformModel = shaderList[0]->getModelLocation();
+	uniformProjection = shaderList[0]->getProjectionLocation();
+	uniformView = shaderList[0]->getViewLocation();
+	uniformSpecIntensity = shaderList[0]->getSpecularIntensityLocation();
+	uniformSpecShininess = shaderList[0]->getSpecularShininessLocation();
+	uniformEyePos = shaderList[0]->getEyePositionLocation();
+
+	glViewport(0, 0, WIDTH, HEIGHT);
+
+	//clear window
+	glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+	spotLights[1].setFlash(camera.getCameraPositon(), camera.getCameraDirection());
+
+	glUniformMatrix4fv(uniformProjection, 1, GL_FALSE, glm::value_ptr(projectionMatrix));
+	glUniformMatrix4fv(uniformView, 1, GL_FALSE, glm::value_ptr(viewMatrix));
+	glm::vec3 cameraPos = camera.getCameraPositon();
+	glUniform3f(uniformEyePos, cameraPos.x, cameraPos.y, cameraPos.z);
+
+	//set Directional Light
+	shaderList[0]->setDirectionalLight(&ambient);
+	//set Point Lights
+	shaderList[0]->setPointLights(pointLights, pointLightCount);
+	//Set Spot Lights
+	shaderList[0]->setSpotLights(spotLights, spotLightCount);
+
+	shaderList[0]->setDirectionalLightTransform(&(ambient.calculateLightTransform()));
+
+	ambient.getShadowMap()->read(GL_TEXTURE1);
+	shaderList[0]->setTexture(0);
+	shaderList[0]->setDirectionalShadowMap(1);
+
+	renderTestScene();
 }
 
 int main() {
 	Window window(WIDTH, HEIGHT);
 	//window = glfwWindow(WIDTH, HEIGHT);
 	window.initialize();
-
-	Camera camera = Camera(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), -90.0f, 0.0f, 5.0f, 1.0f);
 
 	createTriangle();
 	createShader();
@@ -154,9 +246,10 @@ int main() {
 
 	ambient = DirectionalLight(1.0f, 1.0f, 1.0f, //r g b
 								0.5f, 0.5f, //aIntensity dIntensity
-								2.0f, -1.0f, -2.0f); // x y z
+								2.0f, -1.0f, -2.0f, // x y z
+								1024, 1024 //shadowmap dimensions
+								); 
 
-	unsigned int pointLightCount = 0;
 
 	pointLights[0] = PointLight(0.0f, 1.0f, 0.0f, //r g b
 								0.1f, 0.1f,	//aIntensity dIntensity
@@ -172,7 +265,6 @@ int main() {
 
 	pointLightCount++;
 
-	unsigned int spotLightCount = 0;
 
 	spotLights[0] = SpotLight(1.0f, 1.0f, 0.0f, //r g b
 							0.1f, 1.0f,	//aIntensity dIntensity
@@ -204,10 +296,6 @@ int main() {
 
 	glm::mat4 projectionMat = glm::perspective(45.0f, (GLfloat)bufferWidth / (GLfloat)bufferHeight, 0.1f, 100.0f);
 
-	GLuint uniformModel, uniformProjection, uniformView;
-	GLuint uniformSpecIntensity, uniformSpecShininess;
-	GLuint uniformEyePos;
-
 	//Main Loop
 	while (!window.shouldClose()) {
 		GLfloat now = glfwGetTime();
@@ -219,55 +307,8 @@ int main() {
 		camera.keyControl(window.getKeys(), deltaTime);
 		camera.mouseControl(window.getXchange(), window.getYchange());
 
-		//clear window
-		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-		shaderList[0]->useShader();
-		uniformModel = shaderList[0]->getModelLocation();
-		uniformProjection = shaderList[0]->getProjectionLocation();
-		uniformView = shaderList[0]->getViewLocation();
-		uniformSpecIntensity = shaderList[0]->getSpecularIntensityLocation();
-		uniformSpecShininess = shaderList[0]->getSpecularShininessLocation();
-		uniformEyePos = shaderList[0]->getEyePositionLocation();
-
-		spotLights[1].setFlash(camera.getCameraPositon(), camera.getCameraDirection());
-
-		//set Directional Light
-		shaderList[0]->setDirectionalLight(&ambient);
-		//set Point Lights
-		shaderList[0]->setPointLights(pointLights, pointLightCount);
-		//Set Spot Lights
-		shaderList[0]->setSpotLights(spotLights, spotLightCount);
-
-		glUniformMatrix4fv(uniformProjection, 1, GL_FALSE, glm::value_ptr(projectionMat));
-		glUniformMatrix4fv(uniformView, 1, GL_FALSE, glm::value_ptr(camera.calculateViewMatrix()));
-		glm::vec3 cameraPos = camera.getCameraPositon();
-		glUniform3f(uniformEyePos, cameraPos.x, cameraPos.y, cameraPos.z);
-
-
-		glm::mat4 model(1.0f);
-		model = glm::translate(model, glm::vec3(0.0f, 0.0f, -2.5f));
-		model = glm::rotate(model, 0.0f * toRadians, glm::vec3(0.0f, 1.0f, 0.0f));
-		//model = glm::scale(model, glm::vec3(0.4f, 0.4f, 1.0f));
-		glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
-		brick.useTexture();
-		mat1.useMaterial(uniformSpecIntensity, uniformSpecShininess);
-		meshList[0]->renderMesh();
-
-		model = glm::mat4(1.0f);
-		model = glm::translate(model, glm::vec3(0.0f, 2.0f, -2.5f));
-		model = glm::rotate(model, 0.0f * toRadians, glm::vec3(0.0f, 1.0f, 0.0f));
-		model = glm::scale(model, glm::vec3(0.01f, 0.01f, 0.01f));
-		glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
-		xwing.renderModel();
-
-		glm::mat4 floorModel(1.0f);
-		floorModel = glm::translate(floorModel, glm::vec3(0.0f, -2.0f, 0.0f));
-		glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(floorModel));
-		dirt.useTexture();
-		mat2.useMaterial(uniformSpecIntensity, uniformSpecShininess);
-		meshList[1]->renderMesh();
+		shadowMapPass(&ambient);
+		renderPass(projectionMat, camera.calculateViewMatrix());
 		
 		glUseProgram(0);
 

@@ -1,5 +1,7 @@
 #pragma once
 #include <GL/glew.h>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/glm.hpp>
 #include <iostream>
 #include <fstream>
 #include <stdio.h>
@@ -35,6 +37,10 @@ public:
 	void setPointLights(PointLight* pLights, unsigned int lightCount);
 	void setSpotLights(SpotLight* sLights, unsigned int spotLightCount);
 
+	void setTexture(GLint textureUnit);
+	void setDirectionalShadowMap(GLint textureUnit);
+	void setDirectionalLightTransform(glm::mat4* lTransform);
+
 	void useShader();
 	void clearShader();
 
@@ -49,6 +55,10 @@ private:
 
 	GLuint uniformPointLightCount;
 	GLuint uniformSpotLightCount;
+
+	GLuint uniformTexture;
+
+	GLuint uniformDirectionalLightTransform, uniformDirectionalShadowMap;
 
 	struct {
 		GLuint uniformColour;
