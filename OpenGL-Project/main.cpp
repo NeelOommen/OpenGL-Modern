@@ -162,7 +162,7 @@ void renderTestScene() {
 	meshList[0]->renderMesh();
 
 	model = glm::mat4(1.0f);
-	model = glm::translate(model, glm::vec3(0.0f, 2.0f, -2.5f));
+	model = glm::translate(model, glm::vec3(0.0f, 2.0f, 2.0f));
 	model = glm::rotate(model, 0.0f * toRadians, glm::vec3(0.0f, 1.0f, 0.0f));
 	model = glm::scale(model, glm::vec3(0.01f, 0.01f, 0.01f));
 	glUniformMatrix4fv(uniformModel, 1, GL_FALSE, glm::value_ptr(model));
@@ -185,7 +185,8 @@ void shadowMapPass(DirectionalLight* light) {
 	glClear(GL_DEPTH_BUFFER_BIT);
 
 	uniformModel = directionalShadowShader.getModelLocation();
-	directionalShadowShader.setDirectionalLightTransform(&light->calculateLightTransform());
+	glm::mat4 lightTransform = light->calculateLightTransform();
+	directionalShadowShader.setDirectionalLightTransform(&lightTransform);
 
 	renderTestScene();
 
@@ -222,7 +223,8 @@ void renderPass(glm::mat4 projectionMatrix, glm::mat4 viewMatrix) {
 	//Set Spot Lights
 	shaderList[0]->setSpotLights(spotLights, spotLightCount);
 
-	shaderList[0]->setDirectionalLightTransform(&(ambient.calculateLightTransform()));
+	glm::mat4 ambientTransform = ambient.calculateLightTransform();
+	shaderList[0]->setDirectionalLightTransform(&ambientTransform);
 
 	ambient.getShadowMap()->read(GL_TEXTURE1);
 	shaderList[0]->setTexture(0);
@@ -245,8 +247,8 @@ int main() {
 	dirt.loadTextureWithAlpha();
 
 	ambient = DirectionalLight(1.0f, 1.0f, 1.0f, //r g b
-								0.5f, 0.5f, //aIntensity dIntensity
-								2.0f, -1.0f, -2.0f, // x y z
+								0.1f, 0.6f, //aIntensity dIntensity
+								0.0f, -7.0f, -1.0f, // x y z
 								1024, 1024 //shadowmap dimensions
 								); 
 
