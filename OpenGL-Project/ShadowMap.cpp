@@ -63,7 +63,7 @@ void ShadowMap::write() {
 	glBindFramebuffer(GL_FRAMEBUFFER, fbo);
 }
 
-void ShadowMap::read(GLenum textureUnit) {
+void ShadowMap::read(GLint textureUnit) {
 	glActiveTexture(textureUnit);
 	glBindTexture(GL_TEXTURE_2D, shadowMapID);
 }

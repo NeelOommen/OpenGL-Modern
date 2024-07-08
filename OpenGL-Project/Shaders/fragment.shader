@@ -41,6 +41,11 @@ struct Material{
 	float shininess;
 };
 
+struct OmniShadowMap{
+	samplerCube shadowMap;
+	float farPlane;
+};
+
 uniform int pointLightCount;
 uniform int spotLightCount;
 
@@ -50,6 +55,7 @@ uniform SpotLight spotLights[MAX_SPOT_LIGHTS];
 
 uniform sampler2D textureSampler;
 uniform sampler2D directionalShadowMap;
+uniform OmniShadowMap omniShadowMaps[MAX_POINT_LIGHTS + MAX_SPOT_LIGHTS];
 uniform Material material;
 uniform vec3 eyePos;
 
@@ -84,6 +90,19 @@ float calcDirectionalShadowFactor(DirectionalLight light){
 
 }
 
+float calcOmniShadowFactor(PointLight light, int shadowiIdx){
+	vec3 fragToLight = fragPos - light.position;
+	float closest = texture(omniShadowMaps[shadowiIdx].shadowMap, fragToLight).r;
+
+	closest *= omniShadowMaps[shadowiIdx].farPlane;
+
+	float current = length(fragToLight);
+	float bias = 0.05;
+	float shadow = current - bias > closest ? 1.0 : 0.0;
+
+	return shadow;
+}
+
 vec4 calcLightByDirection(Light light, vec3 direction, float shadowFactor){
 	vec4 ambientColour = vec4(light.colour, 1.0f) * light.ambientIntensity;
 
@@ -111,11 +130,14 @@ vec4 calcDirectionalLight(){
 	return calcLightByDirection(directionLight.base, directionLight.direction, shadowFactor);
 }
 
-vec4 calcPointLight(PointLight pLight){
+vec4 calcPointLight(PointLight pLight, int shadowIdx){
 	vec3 direction = fragPos - pLight.position;
 	float distance = length(direction);
 	direction = normalize(direction);
-	vec4 col = calcLightByDirection(pLight.base, direction, 0.0f);
+
+	float shadowFactor = calcOmniShadowFactor(pLight, shadowIdx);
+
+	vec4 col = calcLightByDirection(pLight.base, direction, shadowFactor);
 	float attenuation = pLight.exponent * distance * distance +
 						pLight.linear * distance + 
 						pLight.constant;
@@ -124,12 +146,12 @@ vec4 calcPointLight(PointLight pLight){
 }
 
 
-vec4 calcSpotLight(SpotLight sLight){
+vec4 calcSpotLight(SpotLight sLight, int shadowIdx){
 	vec3 rayDirection = normalize(fragPos - sLight.base.position);
 	float slFactor = dot(rayDirection, sLight.direction);
 
 	if(slFactor > sLight.edge){
-		vec4 col = calcPointLight(sLight.base);
+		vec4 col = calcPointLight(sLight.base, shadowIdx);
 
 		return col * (1.0f - (1.0f - slFactor) * (1.0f / (1.0f - sLight.edge)));
 	}
@@ -141,7 +163,7 @@ vec4 calcPointLights(){
 	vec4 totalColour = vec4(0,0,0,0);
 
 	for(int i = 0; i < pointLightCount; i++){
-		totalColour += calcPointLight(pointLights[i]);
+		totalColour += calcPointLight(pointLights[i], i);
 	}
 
 	return totalColour;
@@ -151,7 +173,7 @@ vec4 calcSpotLights(){
 	vec4 totalColour = vec4(0,0,0,0);
 
 	for(int i = 0; i < spotLightCount; i++){
-		totalColour += calcSpotLight(spotLights[i]);
+		totalColour += calcSpotLight(spotLights[i], pointLightCount + i);
 	}
 
 	return totalColour;

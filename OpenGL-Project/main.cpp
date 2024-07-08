@@ -35,6 +35,7 @@ std::vector<Mesh*> meshList;
 std::vector<Shader*> shaderList;
 
 Shader directionalShadowShader;
+Shader omniShadowShader;
 
 GLfloat deltaTime = 0.0f;
 GLfloat lastTime = 0.0f;
@@ -53,6 +54,7 @@ Model xwing;
 GLuint uniformModel, uniformProjection, uniformView;
 GLuint uniformSpecIntensity, uniformSpecShininess;
 GLuint uniformEyePos;
+GLuint uniformOmniLightPos, uniformFarPlane;
 
 Camera camera = Camera(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f), -90.0f, 0.0f, 5.0f, 1.0f);
 
@@ -147,8 +149,11 @@ void createShader() {
 	s1->createFromFile(vShader, fShader);
 	shaderList.push_back(s1);
 
-	directionalShadowShader = Shader();
+	//directionalShadowShader = Shader();
+	//omniShadowShader = Shader();
+
 	directionalShadowShader.createFromFile("Shaders/directional_shadow_vert.shader", "Shaders/directional_shadow_frag.shader");
+	omniShadowShader.createFromFile("Shaders/omni_vert.shader", "Shaders/omni_geometry.shader", "Shaders/omni_frag.shader");
 }
 
 void renderTestScene() {
@@ -188,20 +193,48 @@ void shadowMapPass(DirectionalLight* light) {
 	glm::mat4 lightTransform = light->calculateLightTransform();
 	directionalShadowShader.setDirectionalLightTransform(&lightTransform);
 
+	directionalShadowShader.validate();
+
+	renderTestScene();
+
+	glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void omniShadowPass(PointLight* light) {
+	omniShadowShader.useShader();
+
+	glViewport(0, 0, light->getShadowMap()->getWidth(), light->getShadowMap()->getHeight());
+
+	light->getShadowMap()->write();
+	glClear(GL_DEPTH_BUFFER_BIT);
+
+	uniformModel = omniShadowShader.getModelLocation();
+
+	uniformOmniLightPos = omniShadowShader.getLightPosLocation();
+	uniformFarPlane = omniShadowShader.getFarPlaneLocation();
+
+	glUniform3f(uniformOmniLightPos, light->getPosition().x, light->getPosition().y, light->getPosition().z);
+	glUniform1f(uniformFarPlane, light->getFarPlane());
+
+	omniShadowShader.setLightMatrices(light->calculateLightTransforms());
+
+	omniShadowShader.validate();
+
 	renderTestScene();
 
 	glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void renderPass(glm::mat4 projectionMatrix, glm::mat4 viewMatrix) {
-	shaderList[0]->useShader();
+	Shader* sh = shaderList[0];
+	sh->useShader();
 
-	uniformModel = shaderList[0]->getModelLocation();
-	uniformProjection = shaderList[0]->getProjectionLocation();
+	uniformModel = sh->getModelLocation();
+	uniformProjection = sh->getProjectionLocation();
 	uniformView = shaderList[0]->getViewLocation();
-	uniformSpecIntensity = shaderList[0]->getSpecularIntensityLocation();
-	uniformSpecShininess = shaderList[0]->getSpecularShininessLocation();
-	uniformEyePos = shaderList[0]->getEyePositionLocation();
+	uniformSpecIntensity = sh->getSpecularIntensityLocation();
+	uniformSpecShininess = sh->getSpecularShininessLocation();
+	uniformEyePos = sh->getEyePositionLocation();
 
 	glViewport(0, 0, WIDTH, HEIGHT);
 
@@ -217,18 +250,20 @@ void renderPass(glm::mat4 projectionMatrix, glm::mat4 viewMatrix) {
 	glUniform3f(uniformEyePos, cameraPos.x, cameraPos.y, cameraPos.z);
 
 	//set Directional Light
-	shaderList[0]->setDirectionalLight(&ambient);
+	sh->setDirectionalLight(&ambient);
 	//set Point Lights
-	shaderList[0]->setPointLights(pointLights, pointLightCount);
+	sh->setPointLights(pointLights, pointLightCount, 3, 0);
 	//Set Spot Lights
-	shaderList[0]->setSpotLights(spotLights, spotLightCount);
+	sh->setSpotLights(spotLights, spotLightCount, 3 + pointLightCount, pointLightCount);
 
 	glm::mat4 ambientTransform = ambient.calculateLightTransform();
 	shaderList[0]->setDirectionalLightTransform(&ambientTransform);
 
-	ambient.getShadowMap()->read(GL_TEXTURE1);
-	shaderList[0]->setTexture(0);
-	shaderList[0]->setDirectionalShadowMap(1);
+	ambient.getShadowMap()->read(GL_TEXTURE2);
+	shaderList[0]->setTexture(1);
+	shaderList[0]->setDirectionalShadowMap(2);
+
+	shaderList[0]->validate();
 
 	renderTestScene();
 }
@@ -253,14 +288,18 @@ int main() {
 								); 
 
 
-	pointLights[0] = PointLight(0.0f, 1.0f, 0.0f, //r g b
-								0.1f, 0.1f,	//aIntensity dIntensity
-								-4.0f, 2.0f, 0.0f, //x y z
-								0.3f, 0.2f, 0.1f); //constant linear exponent
+	pointLights[0] = PointLight(1024, 1024, //shadow map resolution
+		0.01f, 100.0f, //near and far plane
+		0.0f, 1.0f, 0.0f, //r g b
+		0.1f, 0.1f,	//aIntensity dIntensity
+		-4.0f, 2.0f, 0.0f, //x y z
+		0.3f, 0.2f, 0.1f); //constant linear exponent
 
 	pointLightCount++;
 
-	pointLights[1] = PointLight(1.0f, 0.0f, 1.0f, //r g b
+	pointLights[1] = PointLight( 1024, 1024, //shadow map resolution
+		0.01f, 100.0f, //near and far plane
+		1.0f, 0.0f, 1.0f, //r g b
 		0.1f, 0.1f,	//aIntensity dIntensity
 		4.0f, 1.0f, 0.0f, //x y z
 		0.3f, 0.2f, 0.1f); //constant linear exponent
@@ -268,16 +307,20 @@ int main() {
 	pointLightCount++;
 
 
-	spotLights[0] = SpotLight(1.0f, 1.0f, 0.0f, //r g b
-							0.1f, 1.0f,	//aIntensity dIntensity
-							-4.0f, 2.0f, 0.0f, //x y z
-							0.0f, -1.0f, 0.0f, //direction
-							0.3f, 0.2f, 0.1f, //constant linear exponent
-							20.0f); //edge
+	spotLights[0] = SpotLight(1024, 1024, //shadow map resolution
+		0.01f, 100.0f, //near and far plane
+		1.0f, 1.0f, 0.0f, //r g b
+		0.1f, 1.0f,	//aIntensity dIntensity
+		-4.0f, 2.0f, 0.0f, //x y z
+		0.0f, -1.0f, 0.0f, //direction
+		0.3f, 0.2f, 0.1f, //constant linear exponent
+		20.0f); //edge
 
 	spotLightCount++;
 
-	spotLights[1] = SpotLight(1.0f, 1.0f, 1.0f, //r g b
+	spotLights[1] = SpotLight(1024, 1024, //shadow map resolution
+		0.01f, 100.0f, //near and far plane
+		1.0f, 1.0f, 1.0f, //r g b
 		0.1f, 2.0f,	//aIntensity dIntensity
 		-4.0f, 2.0f, 0.0f, //x y z
 		0.0f, -1.0f, 0.0f, //direction
@@ -296,7 +339,7 @@ int main() {
 
 	int bufferWidth = window.getBufferWidth(), bufferHeight = window.getBufferHeight();
 
-	glm::mat4 projectionMat = glm::perspective(45.0f, (GLfloat)bufferWidth / (GLfloat)bufferHeight, 0.1f, 100.0f);
+	glm::mat4 projectionMat = glm::perspective(glm::radians(60.0f), (GLfloat)bufferWidth / (GLfloat)bufferHeight, 0.1f, 100.0f);
 
 	//Main Loop
 	while (!window.shouldClose()) {
@@ -310,6 +353,14 @@ int main() {
 		camera.mouseControl(window.getXchange(), window.getYchange());
 
 		shadowMapPass(&ambient);
+
+		for (size_t i = 0; i < pointLightCount;i++) {
+			omniShadowPass(&pointLights[i]);
+		}
+		for (size_t i = 0; i < spotLightCount; i++) {
+			omniShadowPass(&spotLights[i]);
+		}
+
 		renderPass(projectionMat, camera.calculateViewMatrix());
 		
 		glUseProgram(0);

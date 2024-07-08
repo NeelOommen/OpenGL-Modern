@@ -10,7 +10,7 @@ public:
 
 	virtual bool init(GLuint width, GLuint height);
 	virtual void write();
-	virtual void read(GLenum textureUnit);
+	virtual void read(GLint textureUnit);
 
 	GLuint getWidth();
 	GLuint getHeight();

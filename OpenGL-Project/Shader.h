@@ -19,8 +19,10 @@ public:
 	Shader();
 	~Shader();
 
-	void createFromString(const char* vertexCode, const char* fragmentCode);
 	void createFromFile(const char* vertexLocation, const char* fragmentLocation);
+	void createFromFile(const char* vertexLocation, const char* geometryLocation, const char* fragmentLocation);
+
+	void validate();
 
 	GLuint getModelLocation();
 	GLuint getProjectionLocation();
@@ -32,14 +34,17 @@ public:
 	GLuint getSpecularIntensityLocation();
 	GLuint getSpecularShininessLocation();
 	GLuint getEyePositionLocation();
+	GLuint getLightPosLocation();
+	GLuint getFarPlaneLocation();
 
 	void setDirectionalLight(DirectionalLight* dLight);
-	void setPointLights(PointLight* pLights, unsigned int lightCount);
-	void setSpotLights(SpotLight* sLights, unsigned int spotLightCount);
+	void setPointLights(PointLight* pLights, unsigned int lightCount, unsigned int textureUnit, unsigned int offset);
+	void setSpotLights(SpotLight* sLights, unsigned int spotLightCount, unsigned int textureUnit, unsigned int offset);
 
 	void setTexture(GLint textureUnit);
 	void setDirectionalShadowMap(GLint textureUnit);
 	void setDirectionalLightTransform(glm::mat4* lTransform);
+	void setLightMatrices(std::vector<glm::mat4> lightMatrices);
 
 	void useShader();
 	void clearShader();
@@ -59,6 +64,9 @@ private:
 	GLuint uniformTexture;
 
 	GLuint uniformDirectionalLightTransform, uniformDirectionalShadowMap;
+	GLuint uniformOmniLightPos, uniformFarPlane;
+
+	GLuint uniformLightMatrices[6];
 
 	struct {
 		GLuint uniformColour;
@@ -93,8 +101,16 @@ private:
 		GLuint uniformEdge;
 	} uniformSpotLight[MAX_SPOT_LIGHTS];
 
-	void compileShader(const char*vertexCode, const char* fragmentShader);
+	struct {
+		GLuint shadowMap;
+		GLuint farPlane;
+	} uniformOmniShadowMaps[MAX_POINT_LIGHTS + MAX_SPOT_LIGHTS];
+
+	void compileShader(const char*vertexCode, const char* fragmentCode);
+	void compileShader(const char*vertexCode, const char* geometryCode, const char* fragmentCode);
 	void addShader(GLuint id, const char* shaderCode, GLenum shaderType);
+
+	void compileProgram();
 
 	std::string readFile(const char* fileLoc);
 };
