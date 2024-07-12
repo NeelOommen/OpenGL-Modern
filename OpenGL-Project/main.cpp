@@ -228,6 +228,7 @@ void omniShadowPass(PointLight* light) {
 void renderPass(glm::mat4 projectionMatrix, glm::mat4 viewMatrix) {
 	Shader* sh = shaderList[0];
 	sh->useShader();
+	sh->validate();
 
 	uniformModel = sh->getModelLocation();
 	uniformProjection = sh->getProjectionLocation();
@@ -249,6 +250,7 @@ void renderPass(glm::mat4 projectionMatrix, glm::mat4 viewMatrix) {
 	glm::vec3 cameraPos = camera.getCameraPositon();
 	glUniform3f(uniformEyePos, cameraPos.x, cameraPos.y, cameraPos.z);
 
+	ambient.getShadowMap()->read(GL_TEXTURE2);
 	//set Directional Light
 	sh->setDirectionalLight(&ambient);
 	//set Point Lights
@@ -258,8 +260,6 @@ void renderPass(glm::mat4 projectionMatrix, glm::mat4 viewMatrix) {
 
 	glm::mat4 ambientTransform = ambient.calculateLightTransform();
 	shaderList[0]->setDirectionalLightTransform(&ambientTransform);
-
-	ambient.getShadowMap()->read(GL_TEXTURE2);
 	shaderList[0]->setTexture(1);
 	shaderList[0]->setDirectionalShadowMap(2);
 
